@@ -25,7 +25,13 @@ const content = ref(props.link.content || '')
 const contentType = ref(props.link.contentType || 'text/plain; charset=utf-8')
 const password = ref(props.link.password || '')
 const comment = ref(props.link.comment || '')
-const expiration = ref(props.link.expiration ? unix2date(props.link.expiration) : undefined)
+
+const todayStr = new Date().toISOString().split('T')[0]
+const expirationStr = ref(
+  props.link.expiration
+    ? new Date(props.link.expiration * 1000).toISOString().split('T')[0]
+    : '',
+)
 
 const urlError = ref('')
 const contentError = ref('')
@@ -85,7 +91,9 @@ async function onSubmit() {
       : { content: content.value, contentType: contentType.value }),
     password: password.value || undefined,
     comment: comment.value || undefined,
-    expiration: expiration.value ? date2unix(expiration.value, 'end') : undefined,
+    expiration: expirationStr.value
+      ? Math.floor(new Date(expirationStr.value + 'T23:59:59').getTime() / 1000)
+      : undefined,
   }
 
   const { link: newLink } = await useAPI(isEdit ? '/api/link/edit' : '/api/link/create', {
@@ -241,6 +249,19 @@ const { previewMode } = useRuntimeConfig().public
             type="text"
             :placeholder="$t('links.password_placeholder')"
           />
+        </div>
+
+        <!-- Expiration -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium">{{ $t('links.expiration_label') }}</label>
+          <Input
+            v-model="expirationStr"
+            type="date"
+            :min="todayStr"
+          />
+          <p class="text-xs text-muted-foreground">
+            {{ $t('links.expiration_hint') }}
+          </p>
         </div>
 
         <!-- Comment -->

@@ -172,6 +172,8 @@
     "slug_required": "Slug 不能为空",
     "password_label": "密码（可选）",
     "password_placeholder": "访问密码",
+    "expiration_label": "过期时间（可选）",
+    "expiration_hint": "留空则永不过期",
     "comment_label": "备注（可选）",
     "comment_placeholder": "添加备注...",
     "copy_success": "复制成功！",

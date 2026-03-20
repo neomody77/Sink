@@ -172,6 +172,8 @@
     "slug_required": "Slug is required",
     "password_label": "Password (optional)",
     "password_placeholder": "Access password",
+    "expiration_label": "Expiration (optional)",
+    "expiration_hint": "Leave empty for no expiration",
     "comment_label": "Comment (optional)",
     "comment_placeholder": "Add a comment...",
     "copy_success": "Copy successful!",
