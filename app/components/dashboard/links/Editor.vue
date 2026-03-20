@@ -1,11 +1,7 @@
 <script setup>
-import { LinkSchema, nanoid } from '@@/schemas/link'
-import { toTypedSchema } from '@vee-validate/zod'
+import { nanoid } from '@@/schemas/link'
 import { Shuffle, Sparkles } from 'lucide-vue-next'
-import { useForm } from 'vee-validate'
 import { toast } from 'vue-sonner'
-import { z } from 'zod'
-import { DependencyType } from '@/components/ui/auto-form/interface'
 
 const props = defineProps({
   link: {
@@ -22,74 +18,34 @@ const dialogOpen = ref(false)
 
 const isEdit = !!props.link.id
 
-const EditLinkSchema = LinkSchema.pick({
-  url: true,
-  slug: true,
-}).extend({
-  optional: LinkSchema.omit({
-    id: true,
-    url: true,
-    slug: true,
-    createdAt: true,
-    updatedAt: true,
-    title: true,
-    description: true,
-    image: true,
-  }).extend({
-    expiration: z.coerce.date().optional(),
-  }).optional(),
-})
+const linkType = ref(props.link.type || 'redirect')
+const slug = ref(props.link.slug || '')
+const url = ref(props.link.url || '')
+const content = ref(props.link.content || '')
+const contentType = ref(props.link.contentType || 'text/plain; charset=utf-8')
+const password = ref(props.link.password || '')
+const comment = ref(props.link.comment || '')
+const expiration = ref(props.link.expiration ? unix2date(props.link.expiration) : undefined)
 
-const fieldConfig = {
-  slug: {
-    disabled: isEdit,
-  },
-  optional: {
-    comment: {
-      component: 'textarea',
-    },
-  },
-}
-
-const dependencies = [
-  {
-    sourceField: 'slug',
-    type: DependencyType.DISABLES,
-    targetField: 'slug',
-    when: () => isEdit,
-  },
-]
-
-const form = useForm({
-  validationSchema: toTypedSchema(EditLinkSchema),
-  initialValues: {
-    slug: link.value.slug,
-    url: link.value.url,
-    optional: {
-      comment: link.value.comment,
-    },
-  },
-  validateOnMount: isEdit,
-  keepValuesOnUnmount: isEdit,
-})
+const urlError = ref('')
+const contentError = ref('')
+const slugError = ref('')
 
 function randomSlug() {
-  form.setFieldValue('slug', nanoid()())
+  slug.value = nanoid()()
 }
 
 const aiSlugPending = ref(false)
 async function aiSlug() {
-  if (!form.values.url)
+  if (!url.value)
     return
 
   aiSlugPending.value = true
   try {
-    const { slug } = await useAPI('/api/link/ai', {
-      query: {
-        url: form.values.url,
-      },
+    const { slug: aiResult } = await useAPI('/api/link/ai', {
+      query: { url: url.value },
     })
-    form.setFieldValue('slug', slug)
+    slug.value = aiResult
   }
   catch (error) {
     console.log(error)
@@ -97,31 +53,53 @@ async function aiSlug() {
   aiSlugPending.value = false
 }
 
-onMounted(() => {
-  if (link.value.expiration) {
-    form.setFieldValue('optional.expiration', unix2date(link.value.expiration))
-  }
-})
+function validate() {
+  urlError.value = ''
+  contentError.value = ''
+  slugError.value = ''
 
-async function onSubmit(formData) {
-  const link = {
-    url: formData.url,
-    slug: formData.slug,
-    ...(formData.optional || []),
-    expiration: formData.optional?.expiration ? date2unix(formData.optional?.expiration, 'end') : undefined,
+  if (linkType.value === 'redirect' && !url.value.trim()) {
+    urlError.value = t('links.url_required')
+    return false
   }
+  if (linkType.value === 'content' && !content.value) {
+    contentError.value = t('links.content_required')
+    return false
+  }
+  if (!slug.value.trim()) {
+    slugError.value = t('links.slug_required')
+    return false
+  }
+  return true
+}
+
+async function onSubmit() {
+  if (!validate())
+    return
+
+  const body = {
+    type: linkType.value,
+    slug: slug.value,
+    ...(linkType.value === 'redirect'
+      ? { url: url.value }
+      : { content: content.value, contentType: contentType.value }),
+    password: password.value || undefined,
+    comment: comment.value || undefined,
+    expiration: expiration.value ? date2unix(expiration.value, 'end') : undefined,
+  }
+
   const { link: newLink } = await useAPI(isEdit ? '/api/link/edit' : '/api/link/create', {
     method: isEdit ? 'PUT' : 'POST',
-    body: link,
+    body,
   })
   dialogOpen.value = false
   emit('update:link', newLink, isEdit ? 'edit' : 'create')
-  if (isEdit) {
-    toast(t('links.update_success'))
-  }
-  else {
-    toast(t('links.create_success'))
-  }
+  toast(isEdit ? t('links.update_success') : t('links.create_success'))
+}
+
+function onOpen() {
+  if (!isEdit)
+    randomSlug()
 }
 
 const { previewMode } = useRuntimeConfig().public
@@ -134,7 +112,7 @@ const { previewMode } = useRuntimeConfig().public
         <Button
           class="ml-2"
           variant="outline"
-          @click="randomSlug"
+          @click="onOpen"
         >
           {{ $t('links.create') }}
         </Button>
@@ -150,35 +128,131 @@ const { previewMode } = useRuntimeConfig().public
       >
         {{ $t('links.preview_mode_tip') }}
       </p>
-      <AutoForm
-        class="overflow-y-auto px-2 space-y-2"
-        :schema="EditLinkSchema"
-        :form="form"
-        :field-config="fieldConfig"
-        :dependencies="dependencies"
-        @submit="onSubmit"
+      <form
+        class="overflow-y-auto px-2 space-y-4"
+        @submit.prevent="onSubmit"
       >
-        <template #slug="slotProps">
-          <div
-            v-if="!isEdit"
-            class="relative"
-          >
-            <div class="flex absolute right-0 top-1 space-x-3">
+        <!-- Type selector -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium">{{ $t('links.type') }}</label>
+          <div class="flex space-x-2">
+            <Button
+              type="button"
+              size="sm"
+              :variant="linkType === 'redirect' ? 'default' : 'outline'"
+              :disabled="isEdit"
+              @click="linkType = 'redirect'"
+            >
+              {{ $t('links.type_redirect') }}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              :variant="linkType === 'content' ? 'default' : 'outline'"
+              :disabled="isEdit"
+              @click="linkType = 'content'"
+            >
+              {{ $t('links.type_content') }}
+            </Button>
+          </div>
+        </div>
+
+        <!-- Slug -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Slug</label>
+          <div class="relative">
+            <Input
+              v-model="slug"
+              :disabled="isEdit"
+              placeholder="my-link"
+            />
+            <div
+              v-if="!isEdit"
+              class="flex absolute right-2 top-1/2 -translate-y-1/2 space-x-3"
+            >
               <Shuffle
                 class="w-4 h-4 cursor-pointer"
                 @click="randomSlug"
               />
               <Sparkles
+                v-if="linkType === 'redirect'"
                 class="w-4 h-4 cursor-pointer"
                 :class="{ 'animate-bounce': aiSlugPending }"
                 @click="aiSlug"
               />
             </div>
-            <AutoFormField
-              v-bind="slotProps"
+          </div>
+          <p
+            v-if="slugError"
+            class="text-sm text-destructive"
+          >
+            {{ slugError }}
+          </p>
+        </div>
+
+        <!-- URL (redirect mode) -->
+        <div
+          v-if="linkType === 'redirect'"
+          class="space-y-2"
+        >
+          <label class="text-sm font-medium">URL</label>
+          <Input
+            v-model="url"
+            placeholder="https://example.com"
+          />
+          <p
+            v-if="urlError"
+            class="text-sm text-destructive"
+          >
+            {{ urlError }}
+          </p>
+        </div>
+
+        <!-- Content (content mode) -->
+        <template v-if="linkType === 'content'">
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Content-Type</label>
+            <Input
+              v-model="contentType"
+              placeholder="text/plain; charset=utf-8"
             />
           </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">{{ $t('links.content') }}</label>
+            <Textarea
+              v-model="content"
+              :placeholder="$t('links.content_placeholder')"
+              class="min-h-[120px] font-mono text-sm"
+            />
+            <p
+              v-if="contentError"
+              class="text-sm text-destructive"
+            >
+              {{ contentError }}
+            </p>
+          </div>
         </template>
+
+        <!-- Password -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium">{{ $t('links.password_label') }}</label>
+          <Input
+            v-model="password"
+            type="text"
+            :placeholder="$t('links.password_placeholder')"
+          />
+        </div>
+
+        <!-- Comment -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium">{{ $t('links.comment_label') }}</label>
+          <Textarea
+            v-model="comment"
+            :placeholder="$t('links.comment_placeholder')"
+            class="min-h-[60px]"
+          />
+        </div>
+
         <DialogFooter>
           <DialogClose as-child>
             <Button
@@ -193,7 +267,7 @@ const { previewMode } = useRuntimeConfig().public
             {{ $t('common.save') }}
           </Button>
         </DialogFooter>
-      </AutoForm>
+      </form>
     </DialogContent>
   </Dialog>
 </template>

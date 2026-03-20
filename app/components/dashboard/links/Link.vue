@@ -95,7 +95,22 @@ function copyLink() {
           </TooltipProvider>
         </div>
 
+        <Badge
+          v-if="link.type === 'content'"
+          variant="secondary"
+          class="shrink-0 text-xs"
+        >
+          TXT
+        </Badge>
+        <Badge
+          v-if="link.password"
+          variant="outline"
+          class="shrink-0 text-xs"
+        >
+          🔒
+        </Badge>
         <a
+          v-if="link.type !== 'content'"
           :href="link.url"
           target="_blank"
           rel="noopener noreferrer"
@@ -187,7 +202,7 @@ function copyLink() {
           </TooltipProvider>
         </template>
         <Separator orientation="vertical" />
-        <span class="truncate">{{ link.url }}</span>
+        <span class="truncate">{{ link.type === 'content' ? `[${link.contentType || 'text/plain'}]` : link.url }}</span>
       </div>
     </NuxtLink>
   </Card>

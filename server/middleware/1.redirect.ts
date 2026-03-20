@@ -29,6 +29,17 @@ export default eventHandler(async (event) => {
     }
 
     if (link) {
+      // Password protection check
+      if (link.password) {
+        const query = getQuery(event)
+        const providedPassword = (query.password || query.p || '') as string
+        if (providedPassword !== link.password) {
+          setResponseStatus(event, 401)
+          setResponseHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
+          return 'Password required. Use ?p=<password> or ?password=<password>'
+        }
+      }
+
       event.context.link = link
       try {
         await useAccessLog(event)
@@ -36,6 +47,12 @@ export default eventHandler(async (event) => {
       catch (error) {
         console.error('Failed write access log:', error)
       }
+
+      if (link.type === 'content') {
+        setResponseHeader(event, 'Content-Type', link.contentType || 'text/plain; charset=utf-8')
+        return link.content || ''
+      }
+
       const target = redirectWithQuery ? withQuery(link.url, getQuery(event)) : link.url
       return sendRedirect(event, target, +useRuntimeConfig(event).redirectStatusCode)
     }
